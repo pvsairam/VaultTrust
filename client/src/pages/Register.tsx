@@ -40,13 +40,34 @@ export default function Register() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: { name: string; email: string; walletAddress: string; signature: string; message: string }) => {
+      console.log('[Register] Sending registration request:', {
+        url: '/api/exchanges/register',
+        method: 'POST',
+        data: { ...data, signature: `${data.signature.slice(0, 10)}...` }
+      });
+      
       const response = await fetch('/api/exchanges/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+      
+      console.log('[Register] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        url: response.url
+      });
+      
       if (!response.ok) {
-        const error = await response.json();
+        const errorText = await response.text();
+        console.error('[Register] Error response body:', errorText);
+        let error;
+        try {
+          error = JSON.parse(errorText);
+        } catch {
+          error = { error: errorText || 'Registration failed' };
+        }
         throw new Error(error.error || 'Registration failed');
       }
       return response.json() as Promise<{ testModeCode: string }>;
