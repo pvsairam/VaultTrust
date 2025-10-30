@@ -60,10 +60,12 @@ export async function initFHEVM() {
     // Step 3: Create instance with Sepolia configuration
     console.log('[FHEVM] Creating instance...');
     
+    // For Sepolia, use relayerUrl and gatewayChainId instead of gatewayUrl
     const config = {
       chainId: 11155111,
       networkUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
-      gatewayUrl: 'https://gateway.sepolia.zama.ai',
+      relayerUrl: 'https://relayer.testnet.zama.cloud',
+      gatewayChainId: 11155111,
       aclContractAddress: '0x687820221192C5B662b25367F70076A37bc79b6c',
       kmsContractAddress: '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC',
       verifyingContractAddress: '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F'
@@ -72,7 +74,8 @@ export async function initFHEVM() {
     console.log('[FHEVM] Configuration:', {
       chainId: config.chainId,
       networkUrl: config.networkUrl,
-      gatewayUrl: config.gatewayUrl,
+      relayerUrl: config.relayerUrl,
+      gatewayChainId: config.gatewayChainId,
       aclContract: config.aclContractAddress,
       kmsContract: config.kmsContractAddress,
       verifier: config.verifyingContractAddress
