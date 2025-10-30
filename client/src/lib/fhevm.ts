@@ -1,42 +1,56 @@
-import { createInstance, initFhevm } from 'fhevmjs';
-import type { FhevmInstance } from 'fhevmjs';
+import { initSDK, createInstance, type SepoliaConfig as ZamaSepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
 
 export const SEPOLIA_GATEWAY_URL = import.meta.env.VITE_FHEVM_GATEWAY_URL || 'https://gateway.sepolia.zama.ai';
 export const KMS_CONTRACT_ADDRESS = import.meta.env.VITE_KMS_CONTRACT_ADDRESS || '0x05fD1D4AE5847832512808d2F666b76F79Bb1C6F';
 export const ACL_CONTRACT_ADDRESS = import.meta.env.VITE_ACL_CONTRACT_ADDRESS || '0x2Fb6f44eB1cbA1372d5Fa506F1171e554Bd5aC1F';
 
-let fhevmInstance: FhevmInstance | null = null;
+let fhevmInstance: any | null = null;
 let isInitialized = false;
 
-export async function initFHEVM(): Promise<FhevmInstance> {
+export async function initFHEVM() {
   if (fhevmInstance && isInitialized) {
     return fhevmInstance;
   }
 
   try {
-    await initFhevm();
+    console.log('[FHEVM] Initializing SDK...');
+    
+    // Step 1: Load WASM
+    await initSDK();
+    console.log('[FHEVM] SDK initialized');
     
     if (!window.ethereum) {
       throw new Error('MetaMask not installed');
     }
     
-    fhevmInstance = await createInstance({
-      chainId: 11155111,
-      network: window.ethereum,
-      gatewayUrl: SEPOLIA_GATEWAY_URL,
-      kmsContractAddress: KMS_CONTRACT_ADDRESS,
-      aclContractAddress: ACL_CONTRACT_ADDRESS,
+    // Step 2: Create instance using window.ethereum (as per Zama docs)
+    console.log('[FHEVM] Creating instance with window.ethereum...');
+    
+    // Import SepoliaConfig and override network
+    const { SepoliaConfig } = await import('@zama-fhe/relayer-sdk/bundle');
+    
+    const config = {
+      ...SepoliaConfig,
+      network: window.ethereum, // ✅ Use wallet provider instead of RPC URL
+    };
+    
+    console.log('[FHEVM] Config:', {
+      ...config,
+      network: 'window.ethereum'
     });
     
+    fhevmInstance = await createInstance(config);
+    
     isInitialized = true;
+    console.log('[FHEVM] Instance created successfully');
     return fhevmInstance;
   } catch (error) {
-    console.error('Failed to initialize FHEVM:', error);
-    throw new Error('FHEVM initialization failed');
+    console.error('[FHEVM] Initialization failed:', error);
+    throw new Error(`FHEVM initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-export async function getFHEVMInstance(): Promise<FhevmInstance> {
+export async function getFHEVMInstance() {
   if (!fhevmInstance || !isInitialized) {
     return await initFHEVM();
   }
@@ -59,12 +73,14 @@ export async function encryptBalance(
     throw new Error('Balance exceeds 64-bit maximum');
   }
   
+  console.log('[FHEVM] Encrypting balance:', balanceAmount.toString());
   const instance = await getFHEVMInstance();
   const input = instance.createEncryptedInput(contractAddress, userAddress);
   
   input.add64(balanceAmount);
   
   const encryptedData = await input.encrypt();
+  console.log('[FHEVM] Encryption successful');
   return encryptedData;
 }
 
@@ -117,5 +133,3 @@ export function parseBalance(balanceString: string, decimals: number = 9): bigin
     throw new Error(error.message || 'Invalid number format');
   }
 }
-
-export type { FhevmInstance };
