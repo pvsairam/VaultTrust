@@ -94,13 +94,26 @@ export async function encryptBalance(
   }
   
   console.log('[FHEVM] Encrypting balance:', balanceAmount.toString());
+  console.log('[FHEVM] Contract:', contractAddress);
+  console.log('[FHEVM] User:', userAddress);
+  
   const instance = await getFHEVMInstance();
+  
+  // Create encrypted input - MUST use the exact connected wallet address
   const input = instance.createEncryptedInput(contractAddress, userAddress);
   
+  // Add the value to encrypt
   input.add64(balanceAmount);
   
+  // Encrypt and generate proof (this calls the relayer)
+  console.log('[FHEVM] Calling relayer to generate proof...');
   const encryptedData = await input.encrypt();
-  console.log('[FHEVM] Encryption successful');
+  
+  console.log('[FHEVM] Encryption successful', {
+    handlesCount: encryptedData.handles.length,
+    proofSize: encryptedData.inputProof.length
+  });
+  
   return encryptedData;
 }
 
