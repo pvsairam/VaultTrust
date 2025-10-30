@@ -4,15 +4,18 @@ import { registerRoutes } from '../server/routes';
 
 const app = express();
 
-// Comprehensive logging
-console.log('[API Handler] Initializing...');
+console.log('[API Init] Starting Express app initialization');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Request logging middleware
+// Comprehensive request logging
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[API] ${req.method} ${req.url} - Query:`, req.query, '- Body:', req.body);
+  console.log(`[API Request] ${req.method} ${req.url}`, {
+    query: req.query,
+    body: req.body,
+    headers: req.headers
+  });
   next();
 });
 
@@ -27,17 +30,21 @@ let isInitialized = false;
 
 async function initializeApp() {
   if (!isInitialized) {
-    console.log('[API Handler] Registering routes...');
+    console.log('[API Init] Registering routes...');
     await registerRoutes(app);
     isInitialized = true;
-    console.log('[API Handler] Routes registered successfully');
+    console.log('[API Init] Routes registered successfully');
   }
   return app;
 }
 
-// Error handler with logging
+// Error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('[API Error]', err);
+  console.error('[API Error]', {
+    error: err.message,
+    stack: err.stack,
+    url: req.url
+  });
   const status = err.status || err.statusCode || 500;
   const message = err.message || "Internal Server Error";
   res.status(status).json({ message });
@@ -45,16 +52,15 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    console.log('[Vercel Handler] Incoming request:', {
+    console.log('[Vercel Handler] Request received:', {
       method: req.method,
       url: req.url,
-      query: req.query,
-      headers: req.headers,
+      path: (req as any).path
     });
     
     const expressApp = await initializeApp();
     
-    // Express expects the handler to be called as middleware
+    // Call Express as middleware
     return expressApp(req as any, res as any);
   } catch (error) {
     console.error('[Vercel Handler] Fatal error:', error);
