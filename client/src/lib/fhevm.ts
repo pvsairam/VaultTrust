@@ -1,8 +1,10 @@
-import { initSDK, createInstance, type SepoliaConfig as ZamaSepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
+import { initSDK, createInstance } from '@zama-fhe/relayer-sdk/bundle';
 
+// Official Sepolia contract addresses from Zama documentation (2025)
 export const SEPOLIA_GATEWAY_URL = import.meta.env.VITE_FHEVM_GATEWAY_URL || 'https://gateway.sepolia.zama.ai';
-export const KMS_CONTRACT_ADDRESS = import.meta.env.VITE_KMS_CONTRACT_ADDRESS || '0x05fD1D4AE5847832512808d2F666b76F79Bb1C6F';
-export const ACL_CONTRACT_ADDRESS = import.meta.env.VITE_ACL_CONTRACT_ADDRESS || '0x2Fb6f44eB1cbA1372d5Fa506F1171e554Bd5aC1F';
+export const KMS_CONTRACT_ADDRESS = import.meta.env.VITE_KMS_CONTRACT_ADDRESS || '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC';
+export const ACL_CONTRACT_ADDRESS = import.meta.env.VITE_ACL_CONTRACT_ADDRESS || '0x687820221192C5B662b25367F70076A37bc79b6c';
+export const INPUT_VERIFIER_ADDRESS = import.meta.env.VITE_INPUT_VERIFIER_ADDRESS || '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F';
 
 let fhevmInstance: any | null = null;
 let isInitialized = false;
@@ -17,35 +19,42 @@ export async function initFHEVM() {
     
     // Step 1: Load WASM
     await initSDK();
-    console.log('[FHEVM] SDK initialized');
+    console.log('[FHEVM] SDK initialized ✓');
     
     if (!window.ethereum) {
-      throw new Error('MetaMask not installed');
+      throw new Error('MetaMask not installed. Please install MetaMask to continue.');
     }
     
-    // Step 2: Create instance using window.ethereum (as per Zama docs)
-    console.log('[FHEVM] Creating instance with window.ethereum...');
+    // Step 2: Create instance using window.ethereum as network provider
+    console.log('[FHEVM] Creating instance with window.ethereum provider...');
     
-    // Import SepoliaConfig and override network
     const { SepoliaConfig } = await import('@zama-fhe/relayer-sdk/bundle');
     
+    // Use SepoliaConfig as base, override network to use wallet provider
     const config = {
       ...SepoliaConfig,
-      network: window.ethereum, // ✅ Use wallet provider instead of RPC URL
+      network: window.ethereum, // ✅ Use injected wallet provider (MetaMask)
+      // Override with official Sepolia addresses if env vars are set
+      aclContractAddress: ACL_CONTRACT_ADDRESS,
+      kmsContractAddress: KMS_CONTRACT_ADDRESS,
+      verifyingContractAddress: INPUT_VERIFIER_ADDRESS,
     };
     
-    console.log('[FHEVM] Config:', {
-      ...config,
-      network: 'window.ethereum'
+    console.log('[FHEVM] Configuration:', {
+      chainId: config.chainId,
+      network: 'window.ethereum (MetaMask)',
+      aclContract: config.aclContractAddress,
+      kmsContract: config.kmsContractAddress,
+      verifierContract: config.verifyingContractAddress
     });
     
     fhevmInstance = await createInstance(config);
     
     isInitialized = true;
-    console.log('[FHEVM] Instance created successfully');
+    console.log('[FHEVM] Instance created successfully ✓');
     return fhevmInstance;
   } catch (error) {
-    console.error('[FHEVM] Initialization failed:', error);
+    console.error('[FHEVM] ❌ Initialization failed:', error);
     throw new Error(`FHEVM initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
