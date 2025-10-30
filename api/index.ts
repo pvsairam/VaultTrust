@@ -25,6 +25,12 @@ async function initializeApp() {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Restore the original API path from query parameter
+  if (req.query.path) {
+    const originalPath = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+    req.url = `/api/${originalPath}`;
+  }
+  
   const expressApp = await initializeApp();
   return expressApp(req as any, res as any);
 }
