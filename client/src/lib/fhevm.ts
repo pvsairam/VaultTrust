@@ -1,7 +1,6 @@
-import { initFhevm, createInstance } from 'fhevmjs';
-import type { FhevmInstance } from 'fhevmjs';
+import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
 
-let fhevmInstance: FhevmInstance | null = null;
+let fhevmInstance: any | null = null;
 let isInitialized = false;
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111 in hex
@@ -29,8 +28,8 @@ export async function initFHEVM() {
   try {
     console.log('[FHEVM] Initializing SDK...');
     
-    // Step 1: Initialize FHEVM WASM
-    await initFhevm();
+    // Step 1: Initialize SDK
+    await initSDK();
     console.log('[FHEVM] SDK initialized ✓');
     
     if (!window.ethereum) {
@@ -57,28 +56,17 @@ export async function initFHEVM() {
       }
     }
     
-    // Step 3: Create instance with Sepolia configuration
-    console.log('[FHEVM] Creating instance...');
+    // Step 3: Create instance with SepoliaConfig + window.ethereum
+    console.log('[FHEVM] Creating instance with SepoliaConfig...');
     
-    // For Sepolia, use relayerUrl and gatewayChainId instead of gatewayUrl
-    const config = {
-      chainId: 11155111,
-      networkUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
-      relayerUrl: 'https://relayer.testnet.zama.cloud',
-      gatewayChainId: 11155111,
-      aclContractAddress: '0x687820221192C5B662b25367F70076A37bc79b6c',
-      kmsContractAddress: '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC',
-      verifyingContractAddress: '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F'
-    };
+    // Use SepoliaConfig and override network with window.ethereum
+    const config = { ...SepoliaConfig, network: window.ethereum };
     
     console.log('[FHEVM] Configuration:', {
-      chainId: config.chainId,
-      networkUrl: config.networkUrl,
-      relayerUrl: config.relayerUrl,
-      gatewayChainId: config.gatewayChainId,
-      aclContract: config.aclContractAddress,
-      kmsContract: config.kmsContractAddress,
-      verifier: config.verifyingContractAddress
+      chainId: SepoliaConfig.chainId,
+      network: 'window.ethereum',
+      aclContract: SepoliaConfig.aclContractAddress,
+      kmsContract: SepoliaConfig.kmsContractAddress
     });
     
     fhevmInstance = await createInstance(config);
@@ -143,17 +131,17 @@ export async function createPermission(
   contractAddress: string,
   userAddress: string,
   signer: any
-): Promise<{ publicKey: string; privateKey: string; signature: string }> {
+): Promise<{ publicKey: string; signature: string }> {
   const instance = await getFHEVMInstance();
   
   console.log('[FHEVM] Creating permission for decryption...');
   console.log('[FHEVM] Contract:', contractAddress);
   console.log('[FHEVM] User:', userAddress);
   
-  // Generate ephemeral keypair for reencryption
-  const { publicKey, privateKey } = instance.generateKeypair();
+  // Get public key from instance
+  const publicKey = instance.getPublicKey(contractAddress);
   
-  // Create EIP712 object for signing
+  // Create EIP712 for user signature
   const eip712 = instance.createEIP712(publicKey, contractAddress);
   
   // Sign with user's wallet
@@ -166,8 +154,7 @@ export async function createPermission(
   console.log('[FHEVM] Permission created ✓');
   
   return {
-    publicKey,
-    privateKey,
+    publicKey: eip712.message.publicKey,
     signature
   };
 }
@@ -177,7 +164,6 @@ export async function reencrypt(
   contractAddress: string,
   userAddress: string,
   publicKey: string,
-  privateKey: string,
   signature: string
 ): Promise<bigint> {
   const instance = await getFHEVMInstance();
@@ -186,16 +172,12 @@ export async function reencrypt(
   console.log('[FHEVM] Handle:', handle.toString());
   console.log('[FHEVM] Contract:', contractAddress);
   
-  // Remove 0x prefix from signature if present
-  const cleanSignature = signature.replace('0x', '');
-  
   const decrypted = await instance.reencrypt(
     handle,
-    privateKey,
-    publicKey,
-    cleanSignature,
+    userAddress,
     contractAddress,
-    userAddress
+    publicKey,
+    signature
   );
   
   console.log('[FHEVM] Reencryption successful ✓');
