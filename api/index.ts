@@ -89,6 +89,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
     
+    app.post('/api/exchanges/verify', async (req, res) => {
+      try {
+        console.log('[Verify] Request body:', req.body);
+        const { walletAddress, code } = req.body;
+        
+        if (!walletAddress || !code) {
+          return res.status(400).json({ 
+            error: 'Missing required fields: walletAddress, code' 
+          });
+        }
+        
+        const db = getDb();
+        
+        // Find exchange by wallet address
+        const exchange = await db.query.exchanges.findFirst({
+          where: eq(schema.exchanges.walletAddress, walletAddress)
+        });
+        
+        if (!exchange) {
+          return res.status(404).json({ error: 'Exchange not found' });
+        }
+        
+        // Check if already verified
+        if (exchange.verified) {
+          return res.status(400).json({ error: 'Exchange already verified' });
+        }
+        
+        // Verify code matches
+        if (exchange.verificationCode !== code) {
+          console.log('[Verify] Code mismatch:', { expected: exchange.verificationCode, provided: code });
+          return res.status(400).json({ error: 'Invalid verification code' });
+        }
+        
+        // Update exchange to verified
+        const [updated] = await db.update(schema.exchanges)
+          .set({ 
+            verified: true,
+            verificationCode: null  // Clear code after verification
+          })
+          .where(eq(schema.exchanges.walletAddress, walletAddress))
+          .returning();
+        
+        console.log('[Verify] Exchange verified:', updated.id);
+        
+        return res.json({
+          message: 'Exchange verified successfully',
+          exchange: updated
+        });
+      } catch (error: any) {
+        console.error('[Verify] Error:', error);
+        return res.status(500).json({ 
+          error: error.message || 'Verification failed' 
+        });
+      }
+    });
+    
     app.get('/api/exchanges/:walletAddress', async (req, res) => {
       try {
         const db = getDb();
