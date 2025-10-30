@@ -55,7 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[Vercel Handler] Request received:', {
       method: req.method,
       url: req.url,
-      path: (req as any).path
+      path: (req as any).path,
+      env: {
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        nodeEnv: process.env.NODE_ENV
+      }
     });
     
     const expressApp = await initializeApp();
@@ -63,10 +67,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Call Express as middleware
     return expressApp(req as any, res as any);
   } catch (error) {
-    console.error('[Vercel Handler] Fatal error:', error);
+    console.error('[Vercel Handler] Fatal error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      error
+    });
     return res.status(500).json({ 
       message: 'Internal server error',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: error instanceof Error ? error.stack : undefined
     });
   }
 }
