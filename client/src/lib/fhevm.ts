@@ -6,6 +6,21 @@ let isInitialized = false;
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111 in hex
 
+// Utility functions
+export function parseBalance(amount: string): bigint {
+  // Remove any commas or spaces
+  const cleanAmount = amount.replace(/[,\s]/g, '');
+  
+  // Convert to BigInt
+  return BigInt(cleanAmount);
+}
+
+export function bytesToHex(bytes: Uint8Array): string {
+  return '0x' + Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export async function initFHEVM() {
   if (fhevmInstance && isInitialized) {
     return fhevmInstance;
