@@ -30,22 +30,18 @@ export async function initFHEVM() {
     
     const { SepoliaConfig } = await import('@zama-fhe/relayer-sdk/bundle');
     
-    // Use SepoliaConfig as base, override network to use wallet provider
+    // Use SepoliaConfig as-is, only override the network to use wallet provider
+    // The SepoliaConfig already has the correct official contract addresses
     const config = {
       ...SepoliaConfig,
       network: window.ethereum, // ✅ Use injected wallet provider (MetaMask)
-      // Override with official Sepolia addresses if env vars are set
-      aclContractAddress: ACL_CONTRACT_ADDRESS,
-      kmsContractAddress: KMS_CONTRACT_ADDRESS,
-      verifyingContractAddress: INPUT_VERIFIER_ADDRESS,
     };
     
     console.log('[FHEVM] Configuration:', {
       chainId: config.chainId,
       network: 'window.ethereum (MetaMask)',
       aclContract: config.aclContractAddress,
-      kmsContract: config.kmsContractAddress,
-      verifierContract: config.verifyingContractAddress
+      kmsContract: config.kmsContractAddress
     });
     
     fhevmInstance = await createInstance(config);
