@@ -68,10 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }).returning();
         
         console.log('[Register] Exchange created:', exchange.id);
+        console.log('[Register] Verification code generated:', verificationCode);
         
         return res.status(201).json({
           message: 'Exchange registered successfully',
-          verificationCode,
+          testModeCode: verificationCode,  // Frontend expects this field name
+          verificationCode,                 // Also send for compatibility
           exchange: {
             id: exchange.id,
             name: exchange.name,
