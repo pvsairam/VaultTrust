@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
@@ -14,23 +14,26 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Shield, AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { encryptBalance, parseBalance, initFHEVM } from "@/lib/fhevm";
 import { PROOF_OF_RESERVES_ADDRESS, PROOF_OF_RESERVES_ABI } from "@/lib/contracts";
 import { bytesToHex } from "@/lib/fhevm";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import type { Exchange } from "@shared/schema";
+import { queryClient } from "@/lib/queryClient";
 
 export default function Submit() {
   const [dataType, setDataType] = useState<string>("");
   const [token, setToken] = useState("");
   const [balanceAmount, setBalanceAmount] = useState("");
   const [isEncrypting, setIsEncrypting] = useState(false);
+  const [hasSavedToDb, setHasSavedToDb] = useState(false);
   
   const { toast} = useToast();
   const { address, isConnected } = useAccount();
   const [, setLocation] = useLocation();
+  const publicClient = usePublicClient();
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -46,6 +49,85 @@ export default function Submit() {
     },
     enabled: isConnected && !!address,
   });
+
+  // Save submission to database after successful blockchain transaction
+  useEffect(() => {
+    async function saveSubmissionToDb() {
+      if (!isSuccess || !hash || !address || hasSavedToDb) return;
+      
+      try {
+        console.log('[Submit] Saving submission to database...');
+        
+        // Get transaction receipt to fetch block number
+        const receipt = await publicClient?.getTransactionReceipt({ hash });
+        
+        if (!receipt) {
+          console.error('[Submit] Could not get transaction receipt');
+          return;
+        }
+
+        // Capitalize first letter to match schema enum
+        const normalizedDataType = dataType.charAt(0).toUpperCase() + dataType.slice(1);
+        
+        const submissionData = {
+          userAddress: address,
+          reserveId: 0, // Will be updated when we query the contract
+          tokenSymbol: token,
+          dataType: normalizedDataType,
+          encryptedBalance: 'ENCRYPTED_ON_CHAIN',
+          transactionHash: hash,
+          blockNumber: Number(receipt.blockNumber),
+          timestamp: new Date().toISOString(),
+          verified: false,
+        };
+
+        console.log('[Submit] Submission data:', submissionData);
+
+        const response = await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submissionData),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save submission');
+        }
+
+        const savedSubmission = await response.json();
+        console.log('[Submit] Submission saved to database:', savedSubmission.id);
+        
+        setHasSavedToDb(true);
+        
+        // Invalidate queries to refresh the dashboard
+        queryClient.invalidateQueries({ queryKey: ['/api/submissions'] });
+        
+        toast({
+          title: "Success!",
+          description: "Your submission has been saved. View it on the Dashboard.",
+        });
+        
+        // Reset form
+        setTimeout(() => {
+          setDataType("");
+          setToken("");
+          setBalanceAmount("");
+          setHasSavedToDb(false);
+          setLocation('/dashboard');
+        }, 2000);
+        
+      } catch (err: any) {
+        console.error('[Submit] Failed to save to database:', err);
+        toast({
+          title: "Warning",
+          description: "Transaction succeeded but failed to save to database. Please contact support.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    saveSubmissionToDb();
+  }, [isSuccess, hash, address, token, dataType, publicClient, hasSavedToDb, toast, setLocation]);
 
   if (!isConnected) {
     return (

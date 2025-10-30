@@ -163,6 +163,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
     
+    app.post('/api/submissions', async (req, res) => {
+      try {
+        console.log('[Create Submission] Request body:', req.body);
+        const submissionData = req.body;
+        
+        // Validate required fields
+        if (!submissionData.userAddress || !submissionData.tokenSymbol || !submissionData.transactionHash) {
+          return res.status(400).json({ 
+            error: 'Missing required fields: userAddress, tokenSymbol, transactionHash' 
+          });
+        }
+        
+        const db = getDb();
+        
+        // Create submission record
+        const [submission] = await db.insert(schema.submissions).values({
+          userAddress: submissionData.userAddress,
+          reserveId: submissionData.reserveId || 0,
+          tokenSymbol: submissionData.tokenSymbol,
+          dataType: submissionData.dataType,
+          encryptedBalance: submissionData.encryptedBalance || 'ENCRYPTED_ON_CHAIN',
+          decryptedBalance: submissionData.decryptedBalance || null,
+          transactionHash: submissionData.transactionHash,
+          blockNumber: submissionData.blockNumber || 0,
+          timestamp: submissionData.timestamp ? new Date(submissionData.timestamp) : new Date(),
+          verified: submissionData.verified || false,
+          verifiedBy: submissionData.verifiedBy || null,
+          verifiedAt: submissionData.verifiedAt ? new Date(submissionData.verifiedAt) : null
+        }).returning();
+        
+        console.log('[Create Submission] Created:', submission.id);
+        
+        return res.status(201).json(submission);
+      } catch (error: any) {
+        console.error('[Create Submission] Error:', error);
+        return res.status(500).json({ 
+          error: error.message || 'Failed to create submission' 
+        });
+      }
+    });
+    
     app.get('/api/submissions', async (req, res) => {
       try {
         const db = getDb();
@@ -170,12 +211,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         if (userAddress) {
           const submissions = await db.query.submissions.findMany({
-            where: eq(schema.submissions.userAddress, userAddress as string)
+            where: eq(schema.submissions.userAddress, userAddress as string),
+            orderBy: (submissions, { desc }) => [desc(submissions.timestamp)]
           });
           return res.json(submissions);
         }
         
-        const submissions = await db.query.submissions.findMany();
+        const submissions = await db.query.submissions.findMany({
+          orderBy: (submissions, { desc }) => [desc(submissions.timestamp)]
+        });
         return res.json(submissions);
       } catch (error: any) {
         return res.status(500).json({ error: error.message });
