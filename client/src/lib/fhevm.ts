@@ -1,6 +1,7 @@
-import { initSDK, createInstance } from '@zama-fhe/relayer-sdk/bundle';
+import { initFhevm, createInstance } from 'fhevmjs';
+import type { FhevmInstance } from 'fhevmjs';
 
-let fhevmInstance: any | null = null;
+let fhevmInstance: FhevmInstance | null = null;
 let isInitialized = false;
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111 in hex
@@ -13,8 +14,8 @@ export async function initFHEVM() {
   try {
     console.log('[FHEVM] Initializing SDK...');
     
-    // Step 1: Load WASM
-    await initSDK();
+    // Step 1: Initialize FHEVM WASM
+    await initFhevm();
     console.log('[FHEVM] SDK initialized ✓');
     
     if (!window.ethereum) {
@@ -41,34 +42,25 @@ export async function initFHEVM() {
       }
     }
     
-    // Step 3: Create instance with explicit Sepolia configuration
+    // Step 3: Create instance with Sepolia configuration
     console.log('[FHEVM] Creating instance...');
     
-    // Use window.ethereum directly as network provider with all required contracts
-    const INPUT_VERIFIER = '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F';
-    
     const config = {
-      network: window.ethereum,
-      chainId: 11155111, // Sepolia
-      relayerUrl: 'https://relayer.testnet.zama.cloud',
-      gatewayUrl: 'https://gateway.sepolia.zama.ai/',
-      gatewayChainId: 11155111,
-      // Official Zama Sepolia contracts (2025)
+      chainId: 11155111,
+      networkUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+      gatewayUrl: 'https://gateway.sepolia.zama.ai',
       aclContractAddress: '0x687820221192C5B662b25367F70076A37bc79b6c',
       kmsContractAddress: '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC',
-      inputVerifierContractAddress: INPUT_VERIFIER,
-      verifyingContractAddressDecryption: INPUT_VERIFIER,
-      verifyingContractAddressInputVerification: INPUT_VERIFIER
+      verifyingContractAddress: '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F'
     };
     
     console.log('[FHEVM] Configuration:', {
       chainId: config.chainId,
-      network: 'window.ethereum',
-      relayerUrl: config.relayerUrl,
+      networkUrl: config.networkUrl,
       gatewayUrl: config.gatewayUrl,
       aclContract: config.aclContractAddress,
       kmsContract: config.kmsContractAddress,
-      verifier: INPUT_VERIFIER
+      verifier: config.verifyingContractAddress
     });
     
     fhevmInstance = await createInstance(config);
@@ -117,64 +109,77 @@ export async function encryptBalance(
   // Add the value to encrypt
   input.add64(balanceAmount);
   
-  // Encrypt and generate proof (this calls the relayer)
-  console.log('[FHEVM] Calling relayer to generate proof...');
+  // Encrypt and generate proof
+  console.log('[FHEVM] Calling encryption service...');
   const encryptedData = await input.encrypt();
   
   console.log('[FHEVM] Encryption successful', {
     handlesCount: encryptedData.handles.length,
-    proofSize: encryptedData.inputProof.length
+    proofLength: encryptedData.inputProof.length
   });
   
   return encryptedData;
 }
 
-export async function createEncryptedInput(
+export async function createPermission(
   contractAddress: string,
-  userAddress: string
-) {
+  userAddress: string,
+  signer: any
+): Promise<{ publicKey: string; privateKey: string; signature: string }> {
   const instance = await getFHEVMInstance();
-  return instance.createEncryptedInput(contractAddress, userAddress);
+  
+  console.log('[FHEVM] Creating permission for decryption...');
+  console.log('[FHEVM] Contract:', contractAddress);
+  console.log('[FHEVM] User:', userAddress);
+  
+  // Generate ephemeral keypair for reencryption
+  const { publicKey, privateKey } = instance.generateKeypair();
+  
+  // Create EIP712 object for signing
+  const eip712 = instance.createEIP712(publicKey, contractAddress);
+  
+  // Sign with user's wallet
+  const signature = await signer.signTypedData(
+    eip712.domain,
+    { Reencrypt: eip712.types.Reencrypt },
+    eip712.message
+  );
+  
+  console.log('[FHEVM] Permission created ✓');
+  
+  return {
+    publicKey,
+    privateKey,
+    signature
+  };
 }
 
-export function hexToBytes(hex: string): Uint8Array {
-  if (hex.startsWith('0x')) {
-    hex = hex.slice(2);
-  }
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
-  }
-  return bytes;
-}
-
-export function bytesToHex(bytes: Uint8Array): string {
-  return '0x' + Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-export function parseBalance(balanceString: string, decimals: number = 9): bigint {
-  const cleanedString = balanceString.replace(/[^0-9.]/g, '');
+export async function reencrypt(
+  handle: bigint,
+  contractAddress: string,
+  userAddress: string,
+  publicKey: string,
+  privateKey: string,
+  signature: string
+): Promise<bigint> {
+  const instance = await getFHEVMInstance();
   
-  if (!cleanedString || cleanedString === '.') {
-    throw new Error('Invalid balance format');
-  }
+  console.log('[FHEVM] Reencrypting value...');
+  console.log('[FHEVM] Handle:', handle.toString());
+  console.log('[FHEVM] Contract:', contractAddress);
   
-  const parts = cleanedString.split('.');
-  const integerPart = parts[0] || '0';
-  const fractionalPart = (parts[1] || '').padEnd(decimals, '0').slice(0, decimals);
+  // Remove 0x prefix from signature if present
+  const cleanSignature = signature.replace('0x', '');
   
-  const wholeNumber = integerPart + fractionalPart;
+  const decrypted = await instance.reencrypt(
+    handle,
+    privateKey,
+    publicKey,
+    cleanSignature,
+    contractAddress,
+    userAddress
+  );
   
-  try {
-    const value = BigInt(wholeNumber);
-    const MAX_UINT64 = BigInt('18446744073709551615');
-    if (value > MAX_UINT64) {
-      throw new Error('Balance too large - maximum is ~18.4 billion tokens');
-    }
-    return value;
-  } catch (error: any) {
-    throw new Error(error.message || 'Invalid number format');
-  }
+  console.log('[FHEVM] Reencryption successful ✓');
+  return decrypted;
 }
