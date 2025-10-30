@@ -41,22 +41,34 @@ export async function initFHEVM() {
       }
     }
     
-    // Step 3: Create instance with window.ethereum (Eip1193Provider)
-    console.log('[FHEVM] Creating instance with window.ethereum...');
+    // Step 3: Create instance with explicit Sepolia configuration
+    console.log('[FHEVM] Creating instance...');
     
-    const { SepoliaConfig } = await import('@zama-fhe/relayer-sdk/bundle');
+    // Use window.ethereum directly as network provider with all required contracts
+    const INPUT_VERIFIER = '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F';
     
-    // Use SepoliaConfig with window.ethereum
     const config = {
-      ...SepoliaConfig,
       network: window.ethereum,
+      chainId: 11155111, // Sepolia
+      relayerUrl: 'https://relayer.testnet.zama.cloud',
+      gatewayUrl: 'https://gateway.sepolia.zama.ai/',
+      gatewayChainId: 11155111,
+      // Official Zama Sepolia contracts (2025)
+      aclContractAddress: '0x687820221192C5B662b25367F70076A37bc79b6c',
+      kmsContractAddress: '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC',
+      inputVerifierContractAddress: INPUT_VERIFIER,
+      verifyingContractAddressDecryption: INPUT_VERIFIER,
+      verifyingContractAddressInputVerification: INPUT_VERIFIER
     };
     
     console.log('[FHEVM] Configuration:', {
       chainId: config.chainId,
-      network: 'window.ethereum (MetaMask)',
+      network: 'window.ethereum',
+      relayerUrl: config.relayerUrl,
+      gatewayUrl: config.gatewayUrl,
       aclContract: config.aclContractAddress,
-      kmsContract: config.kmsContractAddress
+      kmsContract: config.kmsContractAddress,
+      verifier: INPUT_VERIFIER
     });
     
     fhevmInstance = await createInstance(config);
