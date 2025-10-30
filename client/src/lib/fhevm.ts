@@ -1,13 +1,9 @@
 import { initSDK, createInstance } from '@zama-fhe/relayer-sdk/bundle';
 
-// Official Sepolia contract addresses from Zama documentation (2025)
-export const SEPOLIA_GATEWAY_URL = import.meta.env.VITE_FHEVM_GATEWAY_URL || 'https://gateway.sepolia.zama.ai';
-export const KMS_CONTRACT_ADDRESS = import.meta.env.VITE_KMS_CONTRACT_ADDRESS || '0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC';
-export const ACL_CONTRACT_ADDRESS = import.meta.env.VITE_ACL_CONTRACT_ADDRESS || '0x687820221192C5B662b25367F70076A37bc79b6c';
-export const INPUT_VERIFIER_ADDRESS = import.meta.env.VITE_INPUT_VERIFIER_ADDRESS || '0x7048C39f048125eDa9d678AEbaDfB22F7900a29F';
-
 let fhevmInstance: any | null = null;
 let isInitialized = false;
+
+const SEPOLIA_CHAIN_ID = '0xaa36a7'; // 11155111 in hex
 
 export async function initFHEVM() {
   if (fhevmInstance && isInitialized) {
@@ -25,16 +21,35 @@ export async function initFHEVM() {
       throw new Error('MetaMask not installed. Please install MetaMask to continue.');
     }
     
-    // Step 2: Create instance using window.ethereum as network provider
-    console.log('[FHEVM] Creating instance with window.ethereum provider...');
+    // Step 2: Check we're on Sepolia network
+    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' }) as string;
+    console.log('[FHEVM] Current chain ID:', currentChainId);
+    
+    if (currentChainId !== SEPOLIA_CHAIN_ID) {
+      console.log('[FHEVM] Not on Sepolia, requesting network switch...');
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: SEPOLIA_CHAIN_ID }],
+        });
+        console.log('[FHEVM] Switched to Sepolia ✓');
+      } catch (switchError: any) {
+        if (switchError.code === 4902) {
+          throw new Error('Please add Sepolia network to MetaMask first');
+        }
+        throw new Error('Please switch to Sepolia network in MetaMask');
+      }
+    }
+    
+    // Step 3: Create instance with window.ethereum (Eip1193Provider)
+    console.log('[FHEVM] Creating instance with window.ethereum...');
     
     const { SepoliaConfig } = await import('@zama-fhe/relayer-sdk/bundle');
     
-    // Use SepoliaConfig as-is, only override the network to use wallet provider
-    // The SepoliaConfig already has the correct official contract addresses
+    // Use SepoliaConfig with window.ethereum
     const config = {
       ...SepoliaConfig,
-      network: window.ethereum, // ✅ Use injected wallet provider (MetaMask)
+      network: window.ethereum,
     };
     
     console.log('[FHEVM] Configuration:', {
